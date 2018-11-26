@@ -147,6 +147,29 @@ class RepertoireVertexWriter:
     def GetTooltip(self, v):
         return str(v)
 
+class MultiplicityVertexWriter:
+    def __init__(self, clonal_tree):
+        self.clonal_tree = clonal_tree
+        self.dataset = clonal_tree.FullLengthLineage().Dataset()
+        self.tree_mults = [self._GetVertexMultiplicity(v) for v in self.clonal_tree.VertexIter()]
+        self.min_mult = min(self.tree_mults)
+        self.max_mult = max(10, sorted(self.tree_mults)[len(self.tree_mults) - 2])
+        if self.max_mult == self.min_mult:
+            self.max_mult = max(self.tree_mults)
+
+    def _GetVertexMultiplicity(self, v):
+        return self.dataset.GetSeqMultiplicity(self.clonal_tree.GetSequenceByVertex(v).id)
+
+    def GetColor(self, v):
+        vertex_mult = min(self.max_mult, self._GetVertexMultiplicity(v))
+        return utils.GetColorByNormalizedValue('Greens', float(vertex_mult - self.min_mult) / (self.max_mult - self.min_mult))
+
+    def GetLabel(self, v):
+        return '\"' + str(v) + ' mult:' + str(self._GetVertexMultiplicity(v)) + '\"'
+
+    def GetTooltip(self, v):
+        return str(v)
+
 ################################ EDGE WRITERS ####################################
 # contract: GetTooltip(edge), GetWidth(edge)
 class SimpleEdgeWriter:
@@ -201,3 +224,4 @@ class ClonalTreeWriter:
         fh.write('}\n')
         fh.close()
         os.system('fdp -Tsvg ' + output_dot + ' -o ' + output_base + '.svg')
+        os.system('fdp -Tpdf ' + output_dot + ' -o ' + output_base + '.pdf')

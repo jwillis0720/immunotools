@@ -53,6 +53,10 @@ class AbundantLengthFilter:
     def SequenceIsGood(self, seq):
         return len(seq) == self.most_freq_length
 
+class TrivialFilter:
+    def SequenceIsGood(self, seq):
+        return True
+
 class CustomFilter:
     def __init__(self, filters):
         self.filters = filters

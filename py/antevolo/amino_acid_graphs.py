@@ -14,6 +14,7 @@ import dataset
 import clonal_tree_constructor
 import amino_acid_utils
 import vj_annotator
+import clonal_tree_writer
 
 def CheckAminAcidGraphEdges(clonal_tree, aa_nucl_dist_map, used_aa, aa_dict):
     print "== Checking amino acid graph..."
@@ -249,10 +250,35 @@ def OutputSHMsToTxt(tree_shms, vj_annotator, output_fname):
         edge_str = ','.join([str(e[0]) + '-' + str(e[1]) for e in tree_shms.GetEdgesBySHM(shm)])
         fh.write(str(shm.pos) + '\t' + shm.src_n + '\t' + shm.dst_n + '\t' + edge_str + '\t' + str(tree_shms.GetSHMMultiplicity(shm)) + '\t' + tree_shms.GetRegionForSHM(shm).name + '\t' + str(tree_shms.SHMHasReverse(shm)) + '\t' + v_gene + '\t' + j_gene + '\n')
     fh.close()
-    
+
+############################################################################################
+def OutputClonalTree(clonal_tree, full_length_lineage, output_base):
+    vertex_writer = clonal_tree_writer.MultiplicityVertexWriter(clonal_tree)
+    edge_writer = clonal_tree_writer.TypeEdgeWriter(clonal_tree)
+    tree_writer = clonal_tree_writer.ClonalTreeWriter(clonal_tree, vertex_writer, edge_writer)
+    tree_writer.Output(output_base)
+
+def OutputAAGraphsForAbundantAAs(full_length_lineage, aa_dict, output_dir):
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+    seq_iterator = clonal_tree_constructor.AbundantAASequenceIterator(full_length_lineage, 0.0005, 10)
+    empty_filter = clonal_tree_constructor.TrivialFilter()
+    edge_computer = clonal_tree_constructor.NaiveEdgeComputer()
+    tree_constructor = clonal_tree_constructor.ClonalTreeConstructor(full_length_lineage, seq_iterator, empty_filter, edge_computer, 0)
+    clonal_trees = tree_constructor.GetClonalTrees()
+    print str(len(clonal_trees)) + ' clonal trees were constructed for abundant AA acids in ' + full_length_lineage.id()
+    tree_index = 1
+    for tree in clonal_trees:
+        root_seq_id = tree.RootSeq().id
+        tree_aa_mult = aa_dict.GetAAMultiplicity(aa_dict.GetAAById(root_seq_id))
+        OutputClonalTree(tree, full_length_lineage, os.path.join(output_dir, "aa" + str(tree_index) + '_mult' + str(tree_aa_mult)))
+        tree_index += 1
+
+############################################################################################
 def OutputAbundantAAGraphs(full_length_lineages, output_dir):
     for l in full_length_lineages:
-        custom_filter = clonal_tree_constructor.CustomFilter([clonal_tree_constructor.AbundantVJFilter(l), clonal_tree_constructor.AbundantLengthFilter(l)])
+#        custom_filter = clonal_tree_constructor.CustomFilter([clonal_tree_constructor.AbundantVJFilter(l), clonal_tree_constructor.AbundantLengthFilter(l)])
+        custom_filter = clonal_tree_constructor.CustomFilter([clonal_tree_constructor.AbundantLengthFilter(l)])
         aa_iterator = clonal_tree_constructor.AllAbundantAAsIterator(l, 0.0005, 10)
         edge_computer = clonal_tree_constructor.NaiveEdgeComputer()
         tree_constructor = clonal_tree_constructor.ClonalTreeConstructor(l, aa_iterator, custom_filter, edge_computer, 100)
@@ -265,10 +291,11 @@ def OutputAbundantAAGraphs(full_length_lineages, output_dir):
         if len(used_aa) == 0 or len(aa_edges) == 0:
             continue
         print "== Processing lineage " + l.id() + '...'
+        OutputAAGraphsForAbundantAAs(l, aa_dict, os.path.join(output_dir, l.id()))
         annotator = vj_annotator.VJGeneAnnotator(clonal_tree)
         tree_shms = ComputeAminoAcidSHMs(l, used_aa, aa_dict, aa_edges)
         tree_shms.Print()
         OutputAminoAcidGraph(used_aa, aa_edges, aa_dict, tree_shms, os.path.join(output_dir, l.id()))
-        ColorGraphByAbundantAASHMs(used_aa, aa_edges, aa_dict, tree_shms, os.path.join(output_dir, l.id()))
-        OutputSHMPlot(l, used_aa, aa_dict, tree_shms,  os.path.join(output_dir, l.id() + '_aa.pdf'))
+#        ColorGraphByAbundantAASHMs(used_aa, aa_edges, aa_dict, tree_shms, os.path.join(output_dir, l.id()))
+#        OutputSHMPlot(l, used_aa, aa_dict, tree_shms,  os.path.join(output_dir, l.id() + '_aa.pdf'))
         OutputSHMsToTxt(tree_shms, annotator, os.path.join(output_dir, l.id() + '_shms.txt'))

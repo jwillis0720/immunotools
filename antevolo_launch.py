@@ -30,10 +30,10 @@ def PrepareOutputDirs(output_dir):
 #    os.mkdir(output_dirs['trees_AA_coloring'])
 #    output_dirs['trees_IgReC_coloring'] = os.path.join(output_dir, 'trees_igrec')
 #    os.mkdir(output_dirs['trees_IgReC_coloring'])
-    output_dirs['amino_acid_trees'] = os.path.join(output_dir, 'amino_acid_trees')
-    if os.path.exists(output_dirs['amino_acid_trees']):
-        shutil.rmtree(output_dirs['amino_acid_trees'])
-    os.mkdir(output_dirs['amino_acid_trees'])
+#    output_dirs['amino_acid_trees'] = os.path.join(output_dir, 'amino_acid_trees')
+#    if os.path.exists(output_dirs['amino_acid_trees']):
+#        shutil.rmtree(output_dirs['amino_acid_trees'])
+#    os.mkdir(output_dirs['amino_acid_trees'])
     output_dirs['amino_acid_graphs'] = os.path.join(output_dir, 'amino_acid_graphs')
     if os.path.exists(output_dirs['amino_acid_graphs']):
         shutil.rmtree(output_dirs['amino_acid_graphs'])
