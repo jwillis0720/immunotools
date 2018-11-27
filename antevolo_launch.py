@@ -135,7 +135,7 @@ def main(argv):
     print str(len(full_length_lineages)) + " full-length lineages were constructed"
 
 #    OutputAATrees(full_length_lineages, output_dirs['amino_acid_trees'])
-    amino_acid_graphs.OutputAbundantAAGraphs(full_length_lineages, output_dirs['amino_acid_graphs'])
+    amino_acid_graphs.OutputAbundantAAGraphs(full_length_lineages, output_dir, output_dirs['amino_acid_graphs'])
 
 if __name__ == '__main__':
     main(sys.argv)

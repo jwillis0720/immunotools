@@ -59,6 +59,8 @@ class UndirectedClonalTree:
         return len(self.seqs)
 
     def GetVertexNeighs(self, v):
+        if v not in self.adj_list:
+            return []
         return self.adj_list[v]
 
 class SimpleRootComputer:

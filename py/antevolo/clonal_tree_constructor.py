@@ -1,6 +1,7 @@
 import os
 import sys
 import operator
+from datetime import datetime
 
 from Bio import SeqIO
 
@@ -11,6 +12,7 @@ import dataset
 import amino_acid_utils
 import utils
 import clonal_tree_utils
+import graph_utils
 
 ######################## SEQUENCE FILTER #############################
 class AbundantVJFilter:
@@ -123,13 +125,60 @@ class NaiveEdgeComputer:
                 edge_dict[(i, j)] = utils.HammingDistance(seqs[i].seq, seqs[j].seq)
         return edge_dict
 
+class HGToolEdgeComputer:
+    def __init__(self, output_dir, hg_running_line):
+        self.output_dir = output_dir
+        self.hg_running_line = hg_running_line
+        if not os.path.exists(self.output_dir):
+            os.mkdir(self.output_dir)
+
+    def ComputeEdges(self, seqs):
+#        print "# sequences: " + str(len(seqs))
+        current_time = str(datetime.now()).replace(' ', '_')
+        fasta_fname = os.path.join(self.output_dir, 'lineage_' + current_time + '.fasta')
+        self._OutputSeqsToFasta(seqs, fasta_fname)
+        graph_fname = os.path.join(self.output_dir, 'lineage_' + current_time + '.graph')
+        graph = self._ConstructHG(fasta_fname, graph_fname)
+#        self.connected_components = graph.GetConnectedComponents()
+#        component_sizes = [len(c) for c in self.connected_components]
+#        print "Component sizes: " + str(sorted(component_sizes, reverse = True))
+        largest_component = self._GetLargestConnectedComponent(graph)
+#        print len(largest_component)
+        return self._GetComponentEdges(graph, largest_component)
+
+    def _OutputSeqsToFasta(self, seqs, fasta_fname):
+        fasta_fh = open(fasta_fname, 'w')
+        for s in seqs:
+            fasta_fh.write('>' + s.id + '\n')
+            fasta_fh.write(s.seq + '\n')
+        fasta_fh.close()
+
+    def _ConstructHG(self, fasta_fname, graph_fname):
+        os.system(self.hg_running_line + ' -i ' + fasta_fname + ' -o ' + graph_fname + ' -k 10 --tau 20 -T 0 -t 32 > /dev/null') # todo: refactor parameters
+        return graph_utils.Graph(graph_fname)
+
+    def _GetLargestConnectedComponent(self, graph):
+        connected_components = graph.GetConnectedComponents()
+        sorted_components = sorted(connected_components, key = lambda s : len(s), reverse = True)
+        return sorted_components[0]
+
+    def _GetComponentEdges(self, graph, component):
+        component_edges = dict()
+        component_set = set(component)
+        for e in graph.EdgeIterator():
+            if e[0] not in component_set:
+                continue
+            component_edges[e] = graph.GetEdgeWeight(e)
+        return component_edges
+
 ######################## TREE CONSTRUCTOR #############################
 class ClonalTreeConstructor:
-    def __init__(self, full_length_lineage, seq_iterator, seq_filter, edge_computer, min_tree_size):
+    def __init__(self, full_length_lineage, seq_iterator, seq_filter, edge_computer, tree_computer, min_tree_size):
         self.full_length_lineage = full_length_lineage
         self.seq_iterator = seq_iterator
         self.seq_filter = seq_filter
         self.edge_computer = edge_computer
+        self.tree_computer = tree_computer
         self.min_tree_size = min_tree_size
         self.clonal_trees = []
         self._ProcessLineage()
@@ -140,28 +189,15 @@ class ClonalTreeConstructor:
 #            print '  ' + str(len(seqs)) + ' -> ' + str(len(filtered_seqs))
             if len(filtered_seqs) < self.min_tree_size:
                 continue
-            graph, edge_weights = self._ComputeHammingGraph(filtered_seqs)
-            spanning_tree, tree_weights = self._ComputeSpanningTree(graph, edge_weights)
+            edge_weights = self.edge_computer.ComputeEdges(filtered_seqs)
+            tree_weights = self.tree_computer.ComputeSpanningTree(filtered_seqs, edge_weights)
+            print tree_weights
             undirected_tree = clonal_tree_utils.UndirectedClonalTree(self.full_length_lineage, filtered_seqs)
-            for e in spanning_tree.get_edgelist():
+            for e in tree_weights:
                 undirected_tree.AddEdge(e, tree_weights[e])
             root_finder = clonal_tree_utils.SimpleRootComputer(undirected_tree)
             directed_tree = clonal_tree_utils.DirectedClonalTree(undirected_tree, root_finder.GetRoot())
             self.clonal_trees.append(directed_tree)
-
-    def _ComputeHammingGraph(self, seqs):
-        edge_weights = self.edge_computer.ComputeEdges(seqs)
-        graph = Graph()
-        graph.add_vertices(len(seqs))
-        graph.add_edges(edge_weights.keys())
-        return graph, edge_weights
-
-    def _ComputeSpanningTree(self, graph, edge_weights):
-        spanning_tree = graph.spanning_tree(weights = edge_weights.values(), return_tree = True)
-        tree_weights = dict()
-        for e in spanning_tree.get_edgelist():
-            tree_weights[e] = edge_weights[e]
-        return spanning_tree, tree_weights
 
     def GetClonalTrees(self):
         return self.clonal_trees
