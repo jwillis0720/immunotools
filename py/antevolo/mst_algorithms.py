@@ -6,6 +6,8 @@ import Queue
 import igraph
 from igraph import *
 
+import disjoint_set
+
 def GetVerticesByEdgeDict(edge_dict):
     vertices = set()
     for e in edge_dict:
@@ -32,34 +34,32 @@ class VertexMultMSTFinder:
      
     def ComputeSpanningTree(self, sequences, edge_dict):
         print "==== "
-        print "Original graph: " + str(edge_dict)
+#        print "Original graph: " + str(edge_dict)
         mult_dict = dict()
         vertices = GetVerticesByEdgeDict(edge_dict)
         for v in vertices:
             seq_id = sequences[v].id
             mult_dict[v] = self.dataset.GetSeqMultiplicity(seq_id)
-        tree_edges = self._ComputeTree(edge_dict, mult_dict)
+        tree_edges = self._ComputeTree(edge_dict, mult_dict, len(vertices))
         print 'Tree: ' + str(len(tree_edges)) + ', vertices: ' + str(len(vertices))
         return tree_edges
 
-    def _ComputeTree(self, edge_dict, vertex_mult_dict):
+    def _ComputeTree(self, edge_dict, vertex_mult_dict, num_vertices):
         weight_queues = self._ComputeWeightDegreeQueue(edge_dict, vertex_mult_dict)
-        visited_vertices = set()
         tree_edges = dict()
         num_processed_edges = 0
+        vertex_ds = disjoint_set.DisjointSet(num_vertices)
         for w in sorted(weight_queues.keys()):
             curr_queue = weight_queues[w]
             while not curr_queue.empty():
                 edge_pair = curr_queue.get() 
                 weight = edge_pair[0]
                 edge = edge_pair[1]
-                num_processed_edges += 1
-                # REPLACE TO CYCLE EXITSANCE!!!
-                if edge[0] in visited_vertices and edge[1] in visited_vertices:
+                if vertex_ds.find_index(edge[0]) == vertex_ds.find_index(edge[1]):
                     continue
+                num_processed_edges += 1
                 tree_edges[edge] = edge_dict[edge]
-                visited_vertices.add(edge[0])
-                visited_vertices.add(edge[1])
+                vertex_ds.union(edge[0], edge[1])
         print "# processed: " + str(num_processed_edges) + ' # original edges: ' + str(len(edge_dict))
         return tree_edges
 
