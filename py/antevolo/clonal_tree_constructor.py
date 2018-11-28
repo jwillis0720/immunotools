@@ -73,7 +73,8 @@ class CustomFilter:
 class AllSequenceIterator:
     def __init__(self, full_length_lineage):
         self.full_length_lineage = full_length_lineage
-        self.seqs.append([seq for seq in FullLengthSeqIdIter])
+        self.seqs = []
+        self.seqs.append([seq for seq in self.full_length_lineage.FullLengthSeqIdIter()])
         
     def __iter__(self):
         for seqs in self.seqs:
@@ -154,7 +155,7 @@ class HGToolEdgeComputer:
         fasta_fh.close()
 
     def _ConstructHG(self, fasta_fname, graph_fname):
-        os.system(self.hg_running_line + ' -i ' + fasta_fname + ' -o ' + graph_fname + ' -k 10 --tau 20 -T 0 -t 32 > /dev/null') # todo: refactor parameters
+        os.system(self.hg_running_line + ' -i ' + fasta_fname + ' -o ' + graph_fname + ' -k 20 --tau 10 -T 0 -t 32 > /dev/null') # todo: refactor parameters
         return graph_utils.Graph(graph_fname)
 
     def _GetLargestConnectedComponent(self, graph):
@@ -189,9 +190,10 @@ class ClonalTreeConstructor:
 #            print '  ' + str(len(seqs)) + ' -> ' + str(len(filtered_seqs))
             if len(filtered_seqs) < self.min_tree_size:
                 continue
+            print "Computing edges of the Hamming graph..."
             edge_weights = self.edge_computer.ComputeEdges(filtered_seqs)
+            print "Computing MST of the Hamming graph..."
             tree_weights = self.tree_computer.ComputeSpanningTree(filtered_seqs, edge_weights)
-            print tree_weights
             undirected_tree = clonal_tree_utils.UndirectedClonalTree(self.full_length_lineage, filtered_seqs)
             for e in tree_weights:
                 undirected_tree.AddEdge(e, tree_weights[e])

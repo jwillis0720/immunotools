@@ -36,7 +36,7 @@ class CDR3VertexWriter:
 
     def GetTooltip(self, v):
         vertex_cdr3 = self._GetVertexCDR3(v)
-        return '\"ID:' + str(v) + " CDR3 ID:" + str(self.cdr3s.index(vertex_cdr3)) + '\"'
+        return 'ID:' + str(v) + " CDR3 ID:" + str(self.cdr3s.index(vertex_cdr3)) 
 
 class SHMDepthVertexWriter:
     def __init__(self, clonal_tree):
@@ -69,7 +69,7 @@ class SHMDepthVertexWriter:
 
     def GetTooltip(self, v):
         seq_id = self.clonal_tree.GetSequenceByVertex(v).id
-        return '\"ID:' + str(v) + ' ' + str(self.seq_shm_dict[seq_id]) + ' SHM(s)\"'
+        return 'ID:' + str(v) + ' ' + str(self.seq_shm_dict[seq_id]) + ' SHM(s)'
 
 class AASeqVertexWriter:
     def __init__(self, clonal_tree):
@@ -103,7 +103,7 @@ class AASeqVertexWriter:
     def GetTooltip(self, v):
         seq_id = self.clonal_tree.GetSequenceByVertex(v).id
         aa_seq = self.id_aa_dict[seq_id]
-        return '\"AA ID: ' +  str(self.sorted_aa_list.index(aa_seq)) + ' MULT: ' + str(len(self.aa_dict[aa_seq])) + '\"'
+        return 'AA ID: ' +  str(self.sorted_aa_list.index(aa_seq)) + ' MULT: ' + str(len(self.aa_dict[aa_seq]))
 
 class UniqueAAColorWriter:
     def __init__(self, clonal_tree):
@@ -116,16 +116,20 @@ class UniqueAAColorWriter:
             self.id_aa_dict[seq.id] = aa_seq
         self.aa_seqs = list(self.aa_seqs)      
 
+    def _GetVertexAA(self, v):
+        return self.id_aa_dict[self.clonal_tree.GetSequenceByVertex(v).id]
+
     def GetColor(self, v):
-        vertex_aa = self.id_aa_dict[self.clonal_tree.GetSequenceByVertex(v).id]
+        vertex_aa = self._GetVertexAA(v)
         return utils.GetColorByNormalizedValue('jet', float(self.aa_seqs.index(vertex_aa)) / len(self.aa_seqs))
 
     def GetLabel(self, v):
-        return str(v)
+        aa_index = self.aa_seqs.index(self._GetVertexAA(v))
+        return str(v) + ' AA ID: ' + str(aa_index)
 
-    def GetToolTip(self, v):
-        vertex_aa = self.id_aa_dict[self.clonal_tree.GetSequenceByVertex(v).id]
-        return '\"AA ID: ' + str(self.aa_seqs.index(vertex_aa))
+    def GetTooltip(self, v):
+        vertex_aa = self._GetVertexAA(v)
+        return 'AA ID: ' + str(self.aa_seqs.index(vertex_aa)) 
 
 class RepertoireVertexWriter:
     def __init__(self, clonal_tree, repertoire_fasta):
@@ -165,7 +169,7 @@ class MultiplicityVertexWriter:
         return utils.GetColorByNormalizedValue('Greens', float(vertex_mult - self.min_mult) / (self.max_mult - self.min_mult))
 
     def GetLabel(self, v):
-        return '\"' + str(v) + ' mult:' + str(self._GetVertexMultiplicity(v)) + '\"'
+        return str(v) + ' mult:' + str(self._GetVertexMultiplicity(v))
 
     def GetTooltip(self, v):
         return str(v)
@@ -217,11 +221,11 @@ class ClonalTreeWriter:
         fh.write('graph [overlaps = false]\n')
         # writing vertices
         for v in self.clonal_tree.VertexIter():
-            fh.write(str(v) + ' [style = filled, fillcolor = \"' + self.vertex_writer.GetColor(v) + '\", label = ' + self.vertex_writer.GetLabel(v) + ', tooltip = ' + self.vertex_writer.GetTooltip(v) + ']\n')
+            fh.write(str(v) + ' [style = filled, fillcolor = \"' + self.vertex_writer.GetColor(v) + '\", label = \"' + self.vertex_writer.GetLabel(v) + '\", tooltip = \"' + self.vertex_writer.GetTooltip(v) + '\"]\n')
         # writing edges
         for e in self.clonal_tree.EdgeIter():
             fh.write(str(e[0]) + ' -> ' + str(e[1]) + ' [color = ' + self.edge_writer.GetColor(e) + ', tooltip = ' + self.edge_writer.GetTooltip(e) + ', penwidth = ' + str(self.edge_writer.GetWidth(e)) + ']\n')
         fh.write('}\n')
         fh.close()
-        os.system('fdp -Tsvg ' + output_dot + ' -o ' + output_base + '.svg')
-        os.system('fdp -Tpdf ' + output_dot + ' -o ' + output_base + '.pdf')
+#        os.system('dot -Tsvg ' + output_dot + ' -o ' + output_base + '.svg')
+        os.system('dot -Tpdf ' + output_dot + ' -o ' + output_base + '.pdf')

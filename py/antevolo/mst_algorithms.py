@@ -33,22 +33,25 @@ class VertexMultMSTFinder:
         self.dataset = self.full_length_lineage.Dataset()
      
     def ComputeSpanningTree(self, sequences, edge_dict):
-        print "==== "
+#        print "==== "
 #        print "Original graph: " + str(edge_dict)
         mult_dict = dict()
         vertices = GetVerticesByEdgeDict(edge_dict)
         for v in vertices:
             seq_id = sequences[v].id
             mult_dict[v] = self.dataset.GetSeqMultiplicity(seq_id)
-        tree_edges = self._ComputeTree(edge_dict, mult_dict, len(vertices))
-        print 'Tree: ' + str(len(tree_edges)) + ', vertices: ' + str(len(vertices))
+        tree_edges = self._ComputeTree(edge_dict, mult_dict, vertices)
+        if len(tree_edges) + 1 != len(vertices):
+            print "ERROR: Tree structure is not correct! # edges: " + str(len(tree_edges)) + ', # vertices: ' + str(len(vertices))
+            sys.exit(1)
+#        print 'Tree: ' + str(len(tree_edges)) + ', vertices: ' + str(len(vertices))
         return tree_edges
 
-    def _ComputeTree(self, edge_dict, vertex_mult_dict, num_vertices):
+    def _ComputeTree(self, edge_dict, vertex_mult_dict, vertices):
         weight_queues = self._ComputeWeightDegreeQueue(edge_dict, vertex_mult_dict)
         tree_edges = dict()
         num_processed_edges = 0
-        vertex_ds = disjoint_set.DisjointSet(num_vertices)
+        vertex_ds = disjoint_set.DisjointSet(vertices)
         for w in sorted(weight_queues.keys()):
             curr_queue = weight_queues[w]
             while not curr_queue.empty():
@@ -60,7 +63,7 @@ class VertexMultMSTFinder:
                 num_processed_edges += 1
                 tree_edges[edge] = edge_dict[edge]
                 vertex_ds.union(edge[0], edge[1])
-        print "# processed: " + str(num_processed_edges) + ' # original edges: ' + str(len(edge_dict))
+#        print "# processed: " + str(num_processed_edges) + ' # original edges: ' + str(len(edge_dict))
         return tree_edges
 
     def _ComputeEdgeDegreeDict(self, edge_dict, vertex_mult_dict):

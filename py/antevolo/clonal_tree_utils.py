@@ -59,12 +59,11 @@ class UndirectedClonalTree:
         return len(self.seqs)
 
     def GetVertexNeighs(self, v):
-        if v not in self.adj_list:
-            return []
         return self.adj_list[v]
 
 class SimpleRootComputer:
     def __init__(self, undirected_clonal_tree):
+        self.tree = undirected_clonal_tree
         self.seqs = undirected_clonal_tree.GetUsedSequences()
         self.full_length_lineage = undirected_clonal_tree.FullLengthLineage()
         self.dataset = undirected_clonal_tree.FullLengthLineage().Dataset()
@@ -72,11 +71,12 @@ class SimpleRootComputer:
     def GetRoot(self):
         min_num_shms = sys.maxint
         root_ind = -1
-        for i in range(len(self.seqs)):
-            cur_num_shms = self.full_length_lineage.SHMDepth(self.seqs[i].id)
+        for v in self.tree.VertexIter():
+            vertex_seq_id = self.tree.GetSequenceByVertex(v).id
+            cur_num_shms = self.full_length_lineage.SHMDepth(vertex_seq_id)
             if cur_num_shms < min_num_shms:
                 min_num_shms = cur_num_shms
-                root_ind = i
+                root_ind = v
         return root_ind
 
 class DirectedClonalTree:
@@ -88,29 +88,33 @@ class DirectedClonalTree:
 
     def _InitDirectEdges(self, undirected_clonal_tree):
         edge_classifier = DirectedEdgeClassifier(self.full_length_lineage)
-        self.edges = dict()
+        self.edges = dict() # adjacency list
         self.edge_stats = dict() # edge -> edge struct
-        self.edge_weights = dict()
-        self.vertex_parent = dict()
+        self.edge_weights = dict() # edge -> weight
+        self.vertex_parent = dict() # vertex -> parent
         queue = Queue.Queue()
         queue.put(self.root_index)
         self.vertex_parent[self.root_index] = -1
         processed_vertices = set()
         while not queue.empty():
             cur_vertex = queue.get()
+#            print "Processing " + str(cur_vertex)
             processed_vertices.add(cur_vertex)
             self.edges[cur_vertex] = set()
             adj_neighs = undirected_clonal_tree.GetVertexNeighs(cur_vertex)
+#            print "Neighs " + str(adj_neighs)
             for n in adj_neighs:
                 if n in processed_vertices:
                     continue
+#                print "Adding " + str(n)
                 queue.put(n)
                 self.edges[cur_vertex].add(n)
-                #print '==', (cur_vertex, n), ':', undirected_clonal_tree.GetWeightByEdge((cur_vertex, n))
-                #print undirected_clonal_tree.GetSequenceByVertex(cur_vertex).id, undirected_clonal_tree.GetSequenceByVertex(n).id    
                 self.edge_stats[(cur_vertex, n)] = edge_classifier.ClassifyEdge(undirected_clonal_tree.GetSequenceByVertex(cur_vertex).id, undirected_clonal_tree.GetSequenceByVertex(n).id) 
                 self.edge_weights[(cur_vertex, n)] = undirected_clonal_tree.GetWeightByEdge((cur_vertex, n))
                 self.vertex_parent[n] = cur_vertex
+        for edge in self.edge_stats:
+            if edge[1] not in self.edges:
+                self.edges[edge[1]] = set()
 
     def RootIndex(self):
         return self.root_index
@@ -118,10 +122,14 @@ class DirectedClonalTree:
     def RootSeq(self):
         return self.seqs[self.root_index]
 
+    def IsRoot(self, v):
+        return self.RootIndex() == v
+
     def IsLeaf(self, v):
         return len(self.edges[v]) == 0
 
     def VertexIter(self):
+        #print self.edges.keys()
         for v in self.edges:
             yield v
 
@@ -159,7 +167,34 @@ class DirectedClonalTree:
         return self.seqs
 
     def NumVertices(self):
-        return len(self.seqs)
+        return len(self.edges)
+
+    ################ editing methods
+    def RemoveEdge(self, edge):
+        #print edge in self.edge_stats, edge in self.edge_weights
+        self.edge_stats.pop(edge)
+        self.edge_weights.pop(edge)
+
+    def RemoveVertex(self, v):
+        #print "Removing " + str(v)
+        if not self.IsRoot(v):
+        #    print "Not root, parent: " + str(self.GetParent(v))
+            parent = self.GetParent(v)
+            self.RemoveEdge((parent, v))
+        #    print "Parent descendants: " + str(self.edges[parent])
+            self.edges[parent].remove(v)
+            self.vertex_parent.pop(v)
+        else:
+            # old root is removed, all its descendants become new roots
+            if not self.IsLeaf(v):
+                self.root_index = list(self.edges[v])[0] # currently we mark only the first descendant as a new root
+        #print "Descendants: " + str(self.edges[v])
+        descendants = self.edges[v]
+        for w in descendants:
+            self.RemoveEdge((v, w))
+            self.vertex_parent[w] = -1
+#            self.edges[v].remove(w)
+        self.edges.pop(v)
 
 class SHMAnalyzer:
     def __init__(self, full_length_lineage):

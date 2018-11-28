@@ -16,6 +16,7 @@ import amino_acid_utils
 import vj_annotator
 import clonal_tree_writer
 import mst_algorithms
+import clonal_tree_simplification
 
 def CheckAminAcidGraphEdges(clonal_tree, aa_nucl_dist_map, used_aa, aa_dict):
     print "== Checking amino acid graph..."
@@ -254,7 +255,7 @@ def OutputSHMsToTxt(tree_shms, vj_annotator, output_fname):
 
 ############################################################################################
 def OutputClonalTree(clonal_tree, full_length_lineage, output_base):
-    vertex_writer = clonal_tree_writer.MultiplicityVertexWriter(clonal_tree)
+    vertex_writer = clonal_tree_writer.UniqueAAColorWriter(clonal_tree) #.MultiplicityVertexWriter(clonal_tree)
     edge_writer = clonal_tree_writer.TypeEdgeWriter(clonal_tree)
     tree_writer = clonal_tree_writer.ClonalTreeWriter(clonal_tree, vertex_writer, edge_writer)
     tree_writer.Output(output_base)
@@ -279,28 +280,45 @@ def OutputAAGraphsForAbundantAAs(full_length_lineage, aa_dict, output_dir):
 ############################################################################################
 def OutputAbundantAAGraphs(full_length_lineages, output_dir, aa_graph_dir):
     for l in full_length_lineages:
-        if len(l) < 100:
+        if len(l) < 1000:
             continue
-#        custom_filter = clonal_tree_constructor.CustomFilter([clonal_tree_constructor.AbundantVJFilter(l), clonal_tree_constructor.AbundantLengthFilter(l)])
         print "== Processing lineage " + l.id() + '...'
+        # clonal tree construction step
         custom_filter = clonal_tree_constructor.CustomFilter([clonal_tree_constructor.AbundantLengthFilter(l)])
-        aa_iterator = clonal_tree_constructor.AllAbundantAAsIterator(l, 0.0005, 10)
+        seq_iterator = clonal_tree_constructor.AllAbundantAAsIterator(l, 0.0001, 10) #clonal_tree_constructor.AllSequenceIterator(l)      
         edge_computer = clonal_tree_constructor.HGToolEdgeComputer(os.path.join(output_dir, "full_length_lineages"), 'build/release/bin/./ig_swgraph_construct') # TODO: refactor
-        tree_computer = mst_algorithms.VertexMultMSTFinder(l) #IGraphMSTFinder()
-        tree_constructor = clonal_tree_constructor.ClonalTreeConstructor(l, aa_iterator, custom_filter, edge_computer, tree_computer, 100)
+        tree_computer = mst_algorithms.VertexMultMSTFinder(l) #mst_algorithms.IGraphMSTFinder()
+        tree_constructor = clonal_tree_constructor.ClonalTreeConstructor(l, seq_iterator, custom_filter, edge_computer, tree_computer, 100)
         clonal_trees = tree_constructor.GetClonalTrees()
         if len(clonal_trees) == 0:
             continue
         clonal_tree = clonal_trees[0]
-        aa_dict = amino_acid_utils.AminoAcidDict(l)
-        used_aa, aa_edges = ComputeAminoAcidGraph(clonal_tree, aa_dict)
-        if len(used_aa) == 0 or len(aa_edges) == 0:
-            continue
-        OutputAAGraphsForAbundantAAs(l, aa_dict, os.path.join(aa_graph_dir, l.id()))
-        annotator = vj_annotator.VJGeneAnnotator(clonal_tree)
-        tree_shms = ComputeAminoAcidSHMs(l, used_aa, aa_dict, aa_edges)
-        tree_shms.Print()
-        OutputAminoAcidGraph(used_aa, aa_edges, aa_dict, tree_shms, os.path.join(aa_graph_dir, l.id()))
+        # simplification step
+        print "# vertices before simplification: " + str(clonal_tree.NumVertices())
+        min_vertex_abundance = 10
+        leaf_filter = clonal_tree_simplification.LowFixedAbundanceLeafRemover(clonal_tree, l, min_vertex_abundance)
+        leaf_remover = clonal_tree_simplification.IterativeTipRemover(clonal_tree, leaf_filter)
+        cleaned_tree = leaf_remover.CleanTips()
+        print "# vertices after simplification: " + str(cleaned_tree.NumVertices())
+        OutputClonalTree(cleaned_tree, l, os.path.join(aa_graph_dir, l.id()))
+
+#        aa_iterator = clonal_tree_constructor.AllAbundantAAsIterator(l, 0.0005, 10)
+#        edge_computer = clonal_tree_constructor.HGToolEdgeComputer(os.path.join(output_dir, "full_length_lineages"), 'build/release/bin/./ig_swgraph_construct') # TODO: refactor
+#        tree_computer = mst_algorithms.VertexMultMSTFinder(l) #IGraphMSTFinder()
+#        tree_constructor = clonal_tree_constructor.ClonalTreeConstructor(l, aa_iterator, custom_filter, edge_computer, tree_computer, 100)
+#        clonal_trees = tree_constructor.GetClonalTrees()
+#        if len(clonal_trees) == 0:
+#            continue
+#        clonal_tree = clonal_trees[0]
+#        aa_dict = amino_acid_utils.AminoAcidDict(l)
+#        used_aa, aa_edges = ComputeAminoAcidGraph(clonal_tree, aa_dict)
+#        if len(used_aa) == 0 or len(aa_edges) == 0:
+#            continue
+#        OutputAAGraphsForAbundantAAs(l, aa_dict, os.path.join(aa_graph_dir, l.id()))
+#        annotator = vj_annotator.VJGeneAnnotator(clonal_tree)
+#        tree_shms = ComputeAminoAcidSHMs(l, used_aa, aa_dict, aa_edges)
+#        tree_shms.Print()
+#        OutputAminoAcidGraph(used_aa, aa_edges, aa_dict, tree_shms, os.path.join(aa_graph_dir, l.id()))
 #        ColorGraphByAbundantAASHMs(used_aa, aa_edges, aa_dict, tree_shms, os.path.join(output_dir, l.id()))
 #        OutputSHMPlot(l, used_aa, aa_dict, tree_shms,  os.path.join(output_dir, l.id() + '_aa.pdf'))
-        OutputSHMsToTxt(tree_shms, annotator, os.path.join(aa_graph_dir, l.id() + '_shms.txt'))
+#        OutputSHMsToTxt(tree_shms, annotator, os.path.join(aa_graph_dir, l.id() + '_shms.txt'))
