@@ -85,7 +85,8 @@ class AbundantAASequenceIterator:
         self.full_length_lineage = full_length_lineage
         self.min_rel_abundance = min_rel_abundance # float number from 0 to 1
         self.min_abs_abundance = min_abs_abundance
-        self.aa_dict = amino_acid_utils.AminoAcidDict(full_length_lineage)
+        self.aa_dict = amino_acid_utils.AminoAcidDict()
+        self.aa_dict.AddLineage(full_length_lineage)
 
     def __iter__(self):
         for aa in self.aa_dict:
@@ -101,7 +102,8 @@ class AllAbundantAAsIterator:
         self.full_length_lineage = full_length_lineage
         self.min_rel_abundance = min_rel_abundance # float number from 0 to 1
         self.min_abs_abundance = min_abs_abundance
-        self.aa_dict = amino_acid_utils.AminoAcidDict(full_length_lineage)
+        self.aa_dict = amino_acid_utils.AminoAcidDict()
+        self.aa_dict.AddLineage(full_length_lineage)
         abundant_aa_seqs = []
         for aa in self.aa_dict:
             if float(self.aa_dict.GetAAMultiplicity(aa)) / len(full_length_lineage) < self.min_rel_abundance or self.aa_dict.GetAAMultiplicity(aa) < min_abs_abundance:

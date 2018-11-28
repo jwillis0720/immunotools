@@ -20,19 +20,40 @@ import utils
 import dataset
 
 class AminoAcidDict:
-    def __init__(self, full_length_lineage):
-        self.full_length_lineage = full_length_lineage
-        self._InitAADict()
-
-    def _InitAADict(self):
+    def __init__(self):
         self.aa_dict = dict() # aa seq -> list of seq IDs
         self.id_aa_dict = dict() # seq D -> aa seq
+        self.aa_index_map = dict() # aa seq -> index in aa_list
+        self.aa_list = [] # refactor: too many storages of AA seqs
+
+    def AddLineage(self, full_length_lineage):
+        self.full_length_lineage = full_length_lineage
+        self._InitAADictFromLineage()
+
+    def _InitAADictFromLineage(self):
         for seq in self.full_length_lineage.FullLengthSeqIdIter():
             aa_seq = str(Seq(seq.seq).translate())
-            self.id_aa_dict[seq.id] = aa_seq
-            if aa_seq not in self.aa_dict:
-                self.aa_dict[aa_seq] = []
-            self.aa_dict[aa_seq].append(seq.id)        
+            self._AddAminoAcidSeq(seq, aa_seq)
+
+    def AddClonalTree(self, clonal_tree):
+        self.clonal_tree = clonal_tree
+        self.full_length_lineage = clonal_tree.FullLengthLineage()
+        self._InitAADictFromTree()
+
+    def _InitAADictFromTree(self):
+        for v in self.clonal_tree.VertexIter():
+            seq = self.clonal_tree.GetSequenceByVertex(v)
+            aa_seq = str(Seq(seq.seq).translate())
+            self._AddAminoAcidSeq(seq, aa_seq)
+
+    def _AddAminoAcidSeq(self, nucl_seq, aa_seq):
+        self.id_aa_dict[nucl_seq.id] = aa_seq
+        if aa_seq not in self.aa_dict:
+            self.aa_dict[aa_seq] = []
+        self.aa_dict[aa_seq].append(nucl_seq.id)
+        if aa_seq not in self.aa_index_map:
+            self.aa_list.append(aa_seq)
+            self.aa_index_map[aa_seq] = len(self.aa_list) - 1 
 
     def __iter__(self):
         for aa in self.aa_dict:
@@ -46,6 +67,12 @@ class AminoAcidDict:
 
     def GetAAById(self, seq_id):
         return self.id_aa_dict[seq_id]
+
+    def GetIndexByAA(self, aa):
+        return self.aa_index_map[aa]
+
+    def GetAAByIndex(self, aa_index):
+        return self.aa_list[aa_index]
 
 class AADiversityAnalyzer:
     def __init__(self, full_length_lineage):
