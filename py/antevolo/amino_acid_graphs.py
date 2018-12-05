@@ -184,7 +184,7 @@ def OutputLineageAminoAcids(full_length_lineage, aa_dict, output_fname):
 ############################################################################################
 def OutputAbundantAAGraphs(full_length_lineages, output_dir, aa_graph_dir):
     for l in full_length_lineages:
-        if len(l) < 1000:
+        if len(l) < 100:
             continue
         print "== Processing lineage " + l.id() + '...'
         # clonal tree construction step
