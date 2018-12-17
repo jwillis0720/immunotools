@@ -174,6 +174,30 @@ class MultiplicityVertexWriter:
     def GetTooltip(self, v):
         return str(v)
 
+class LevelMultiplicityVertexWriter:
+    def __init__(self, clonal_tree):
+        self.clonal_tree = clonal_tree
+        self.dataset = clonal_tree.FullLengthLineage().Dataset()
+        self.levels = [1, 5, 10, 100, 1000]        
+
+    def _GetVertexMultiplicity(self, v):
+        return self.dataset.GetSeqMultiplicity(self.clonal_tree.GetSequenceByVertex(v).id)
+
+    def GetColor(self, v):
+        vertex_mult = self._GetVertexMultiplicity(v)
+        level_ind = len(self.levels)
+        for i in range(len(self.levels)):
+            if vertex_mult <= self.levels[i]:
+                level_ind = i
+                break
+        return utils.GetColorByNormalizedValue('Reds', float(level_ind) / len(self.levels))
+
+    def GetLabel(self, v):
+        return ''
+
+    def GetTooltip(self, v):
+        return str(v)
+
 ################################ EDGE WRITERS ####################################
 # contract: GetTooltip(edge), GetWidth(edge)
 class SimpleEdgeWriter:

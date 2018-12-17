@@ -227,8 +227,9 @@ class AnnotationDF:
 
 ################################### SHM DETAILS ##################################
 class SHM:
-    def __init__(self, pos, src_n, dst_n):
-        self.pos = pos
+    def __init__(self, pos, read_pos, src_n, dst_n):
+        self.pos = pos # gene pos
+        self.read_pos = read_pos
         self.src_n = src_n
         self.dst_n = dst_n
 
@@ -272,7 +273,7 @@ class SHMDF:
         reads = set()
         for i in range(1, len(file_lines)):
             line = file_lines[i].strip()
-            if line[ : len(self.read_prefix)] == self.read_prefix:
+            if line[ : len(self.read_prefix)] == self.read_prefix: # line starts with "Read_name:"
                 if cur_read != '' and cur_gene != '':
                     self._UpdateGeneDict(cur_read, cur_gene, cur_shms)
                 cur_read = line.split()[0][len(self.read_prefix) : ]
@@ -292,7 +293,7 @@ class SHMDF:
 
     def _GetMutationFromLine(self, line):
         splits = line.split()
-        return SHM(int(splits[2]), splits[4], splits[3])
+        return SHM(int(splits[2]), int(splits[1]), splits[4], splits[3])
 
     #### PUBLIC METHODS
     def GetSHMsBySeqName(self, seq_name, gene_type):

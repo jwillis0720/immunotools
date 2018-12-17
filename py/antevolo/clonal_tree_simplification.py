@@ -31,7 +31,7 @@ class IterativeTipRemover:
 #        print "Edges: " + str([e for e in self.clonal_tree.EdgeIter()])
         num_removed_vertices = 1
         iteration_step = 1
-        while num_removed_vertices != 0:
+        while num_removed_vertices != 0: 
             num_removed_vertices = self._CleanTipsInCurrentTree()
             print 'Iteration ' + str(iteration_step) + ': ' + str(num_removed_vertices) + ' vertices were removed'
             iteration_step += 1

@@ -19,7 +19,11 @@ def GetVerticesByEdgeDict(edge_dict):
 class IGraphMSTFinder:
     def ComputeSpanningTree(self, sequences, edge_dict):
         graph = Graph()
-        graph.add_vertices(len(GetVerticesByEdgeDict(edge_dict)))
+        num_vertices = max(GetVerticesByEdgeDict(edge_dict)) + 1 #max(len(GetVerticesByEdgeDict(edge_dict)), max(GetVerticesByEdgeDict(edge_dict)))
+        graph.add_vertices(num_vertices)
+        for e in edge_dict:
+	    if e[0] >= num_vertices or e[1] >= num_vertices:
+                print e
         graph.add_edges(edge_dict.keys())
         spanning_tree = graph.spanning_tree(weights = edge_dict.values(), return_tree = True)
         tree_weights = dict()
@@ -41,7 +45,7 @@ class VertexMultMSTFinder:
             seq_id = sequences[v].id
             mult_dict[v] = self.dataset.GetSeqMultiplicity(seq_id)
         tree_edges = self._ComputeTree(edge_dict, mult_dict, vertices)
-        if len(tree_edges) + 1 != len(vertices):
+        if len(tree_edges) + 1 != len(vertices) and len(tree_edges) != 0 and len(vertices) != 0:
             print "ERROR: Tree structure is not correct! # edges: " + str(len(tree_edges)) + ', # vertices: ' + str(len(vertices))
             sys.exit(1)
 #        print 'Tree: ' + str(len(tree_edges)) + ', vertices: ' + str(len(vertices))

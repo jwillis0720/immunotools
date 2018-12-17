@@ -199,6 +199,10 @@ class ClonalTreeConstructor:
             undirected_tree = clonal_tree_utils.UndirectedClonalTree(self.full_length_lineage, filtered_seqs)
             for e in tree_weights:
                 undirected_tree.AddEdge(e, tree_weights[e])
+            print str(undirected_tree.NumVertices()) + ' vertices in undirected clonal tree'
+            if undirected_tree.NumVertices() == 0:
+                print "WARN: tree is empty"
+                continue
             root_finder = clonal_tree_utils.SimpleRootComputer(undirected_tree)
             directed_tree = clonal_tree_utils.DirectedClonalTree(undirected_tree, root_finder.GetRoot())
             self.clonal_trees.append(directed_tree)

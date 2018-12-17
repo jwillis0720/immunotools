@@ -56,7 +56,7 @@ class UndirectedClonalTree:
         return self.seqs
 
     def NumVertices(self):
-        return len(self.seqs)
+        return len(self.adj_list)
 
     def GetVertexNeighs(self, v):
         return self.adj_list[v]
@@ -77,6 +77,9 @@ class SimpleRootComputer:
             if cur_num_shms < min_num_shms:
                 min_num_shms = cur_num_shms
                 root_ind = v
+        if root_ind == -1:
+            print "ERROR: root was not found"
+            sys.exit(1)
         return root_ind
 
 class DirectedClonalTree:
@@ -98,15 +101,12 @@ class DirectedClonalTree:
         processed_vertices = set()
         while not queue.empty():
             cur_vertex = queue.get()
-#            print "Processing " + str(cur_vertex)
             processed_vertices.add(cur_vertex)
             self.edges[cur_vertex] = set()
             adj_neighs = undirected_clonal_tree.GetVertexNeighs(cur_vertex)
-#            print "Neighs " + str(adj_neighs)
             for n in adj_neighs:
                 if n in processed_vertices:
                     continue
-#                print "Adding " + str(n)
                 queue.put(n)
                 self.edges[cur_vertex].add(n)
                 self.edge_stats[(cur_vertex, n)] = edge_classifier.ClassifyEdge(undirected_clonal_tree.GetSequenceByVertex(cur_vertex).id, undirected_clonal_tree.GetSequenceByVertex(n).id) 
@@ -129,7 +129,6 @@ class DirectedClonalTree:
         return len(self.edges[v]) == 0
 
     def VertexIter(self):
-        #print self.edges.keys()
         for v in self.edges:
             yield v
 
@@ -171,24 +170,19 @@ class DirectedClonalTree:
 
     ################ editing methods
     def RemoveEdge(self, edge):
-        #print edge in self.edge_stats, edge in self.edge_weights
         self.edge_stats.pop(edge)
         self.edge_weights.pop(edge)
 
     def RemoveVertex(self, v):
-        #print "Removing " + str(v)
         if not self.IsRoot(v):
-        #    print "Not root, parent: " + str(self.GetParent(v))
             parent = self.GetParent(v)
             self.RemoveEdge((parent, v))
-        #    print "Parent descendants: " + str(self.edges[parent])
             self.edges[parent].remove(v)
             self.vertex_parent.pop(v)
         else:
             # old root is removed, all its descendants become new roots
             if not self.IsLeaf(v):
                 self.root_index = list(self.edges[v])[0] # currently we mark only the first descendant as a new root
-        #print "Descendants: " + str(self.edges[v])
         descendants = self.edges[v]
         for w in descendants:
             self.RemoveEdge((v, w))
@@ -205,7 +199,7 @@ class SHMAnalyzer:
         v_shms = self.dataset.GetSHMsBySeqName(seq_id, dataset.AnnotatedGene.V)
         j_shms = self.dataset.GetSHMsBySeqName(seq_id, dataset.AnnotatedGene.J)
         cdr3_bounds = self.dataset.GetCDR3BoundsBySeqName(seq_id)
-        return [shm for shm in v_shms if shm.pos < cdr3_bounds[0]], [shm for shm in j_shms if shm.pos > cdr3_bounds[1]]
+        return [shm for shm in v_shms if shm.read_pos < cdr3_bounds[0]], [shm for shm in j_shms if shm.read_pos > cdr3_bounds[1]]
 
     def _ComputeSharedSHMs(self, shms_1, shms_2):
         shm_1_set = set(shms_1)
@@ -229,10 +223,17 @@ class SHMAnalyzer:
         return reverse_shms, added_shms
 
     def CompareSHMs(self, src_id, dst_id):
+        print "==== "
+        print src_id
+        print dst_id
         shms_1 = self._GetVertexSHMs(src_id)
         shms_2 = self._GetVertexSHMs(dst_id)
         reverse_v_shms, added_v_shms = self._GetReverseAddedList(shms_1[0], shms_2[0])
+        print "reverse V: " + str(reverse_v_shms)
+        print "added V: " + str(added_v_shms)
         reverse_j_shms, added_j_shms = self._GetReverseAddedList(shms_1[1], shms_2[1])
+        print "reverse J: " + str(reverse_j_shms)
+        print "added J: " + str(added_j_shms)
         return reverse_v_shms, added_v_shms, reverse_j_shms, added_j_shms
 
 class DirectedEdgeType(Enum):
@@ -252,6 +253,12 @@ class DirectEdge:
         self.added_j = added_j
         # CDR3
         self.cdr3_shms = cdr3_shms
+        self._SanityCheck()
+
+    def _SanityCheck(self):
+        if len(self.reversed_v) == 0 and len(self.added_v) == 0 and len(self.reversed_j) == 0 and len(self.added_j) == 0 and len(self.cdr3_shms) == 0:
+            print "ERROR: two identical reads in the sample"
+            sys.exit(1)
 
     def VSHMIter(self):
         num_v_shms = len(self.reversed_v) + len(self.added_v)
@@ -272,6 +279,21 @@ class DirectEdge:
     def CDR3SHMIter(self):
         for shm in self.cdr3_shms:
             yield shm
+
+    def NumReversedV(self):
+        return len(self.reversed_v)
+
+    def NumAddedV(self):
+        return len(self.added_v)
+
+    def NumReversedJ(self):
+        return len(self.reversed_j)
+
+    def NumAddedJ(self):
+        return len(self.added_j)
+
+    def NumCDR3SHMs(self):
+        return len(self.cdr3_shms)
 
 class DirectedEdgeClassifier:
     def __init__(self, full_length_lineage):
@@ -302,7 +324,6 @@ class DirectedEdgeClassifier:
             return DirectedEdgeType.DIRECTED
         if self._SiblingEdgeIsDoubleMutated(added_v_shms, added_j_shms, reverse_v_shms, reverse_j_shms):
             return DirectedEdgeType.REVERSE
-        #print reverse_v_shms, reverse_j_shms, added_v_shms, added_j_shms
         return DirectedEdgeType.SIBLING
 
     def _GetCDR3SHMs(self, src_id, dst_id):
@@ -311,7 +332,7 @@ class DirectedEdgeClassifier:
         cdr3_shms = []
         for i in range(len(cdr3_src)):
             if cdr3_src[i] != cdr3_dst[i]:
-                cdr3_shms.append(dataset.SHM(i, cdr3_src[i], cdr3_dst[i]))
+                cdr3_shms.append(dataset.SHM(i, -1, cdr3_src[i], cdr3_dst[i]))
         return cdr3_shms
     
     def ClassifyEdge(self, src_id, dst_id):
