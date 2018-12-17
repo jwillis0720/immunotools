@@ -90,5 +90,5 @@ shm_params {
         j_end_max_skipped    5
     }
 
-    shm_finding_algorithm filtering_algorithm; cdr_filtering_algorithm
+    shm_finding_algorithm cdr_filtering_algorithm; filtering_algorithm
 }
