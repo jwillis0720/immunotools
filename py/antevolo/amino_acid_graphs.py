@@ -191,10 +191,10 @@ def OutputAbundantAAGraphs(full_length_lineages, output_dir, aa_graph_dir):
             continue
         # clonal tree construction step
         print "== Processing lineage " + l.id() + '...'
-        custom_filter = clonal_tree_constructor.CustomFilter([clonal_tree_constructor.AbundantLengthFilter(l), clonal_tree_constructor.AbundantVJFilter(l)])
+        custom_filter = clonal_tree_constructor.CustomFilter([clonal_tree_constructor.AbundantLengthFilter(l)]) #, clonal_tree_constructor.AbundantVJFilter(l)])
         seq_iterator = clonal_tree_constructor.AllSequenceIterator(l) # clonal_tree_constructor.AllAbundantAAsIterator(l, 0.0001, 10)
         edge_computer = clonal_tree_constructor.HGToolEdgeComputer(os.path.join(output_dir, "full_length_lineages"), 'build/release/bin/./ig_swgraph_construct') # TODO: refactor
-        tree_computer = mst_algorithms.IGraphMSTFinder() #mst_algorithms.VertexMultMSTFinder(l) #mst_algorithms.IGraphMSTFinder() # mst_algorithms.VertexMultMSTFinder(l)
+        tree_computer = mst_algorithms.VertexMultMSTFinder(l) #mst_algorithms.IGraphMSTFinder() # mst_algorithms.VertexMultMSTFinder(l)
         tree_constructor = clonal_tree_constructor.ClonalTreeConstructor(l, seq_iterator, custom_filter, edge_computer, tree_computer, 100)
         clonal_trees = tree_constructor.GetClonalTrees()
         if len(clonal_trees) == 0:

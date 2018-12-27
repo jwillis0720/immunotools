@@ -223,17 +223,17 @@ class SHMAnalyzer:
         return reverse_shms, added_shms
 
     def CompareSHMs(self, src_id, dst_id):
-        print "==== "
-        print src_id
-        print dst_id
+#        print "==== "
+#        print src_id
+#        print dst_id
         shms_1 = self._GetVertexSHMs(src_id)
         shms_2 = self._GetVertexSHMs(dst_id)
         reverse_v_shms, added_v_shms = self._GetReverseAddedList(shms_1[0], shms_2[0])
-        print "reverse V: " + str(reverse_v_shms)
-        print "added V: " + str(added_v_shms)
+#        print "reverse V: " + str(reverse_v_shms)
+#        print "added V: " + str(added_v_shms)
         reverse_j_shms, added_j_shms = self._GetReverseAddedList(shms_1[1], shms_2[1])
-        print "reverse J: " + str(reverse_j_shms)
-        print "added J: " + str(added_j_shms)
+#        print "reverse J: " + str(reverse_j_shms)
+#        print "added J: " + str(added_j_shms)
         return reverse_v_shms, added_v_shms, reverse_j_shms, added_j_shms
 
 class DirectedEdgeType(Enum):
@@ -241,6 +241,7 @@ class DirectedEdgeType(Enum):
     CDR3 = 1
     REVERSE = 2
     SIBLING = 3
+    MIXED_ALIGNMENT = 4
 
 class DirectEdge:
     def __init__(self, edge_type, reversed_v, added_v, reversed_j, added_j, cdr3_shms):
@@ -253,7 +254,7 @@ class DirectEdge:
         self.added_j = added_j
         # CDR3
         self.cdr3_shms = cdr3_shms
-        self._SanityCheck()
+#        self._SanityCheck()
 
     def _SanityCheck(self):
         if len(self.reversed_v) == 0 and len(self.added_v) == 0 and len(self.reversed_j) == 0 and len(self.added_j) == 0 and len(self.cdr3_shms) == 0:
@@ -311,9 +312,11 @@ class DirectedEdgeClassifier:
                 return False
         return True
 
-    def _GetEdgeType(self, reverse_v_shms, reverse_j_shms, added_v_shms, added_j_shms):
+    def _GetEdgeType(self, reverse_v_shms, reverse_j_shms, added_v_shms, added_j_shms, cdr3_shms):
         num_reverse = len(reverse_v_shms) + len(reverse_j_shms)
         num_added = len(added_v_shms) + len(added_j_shms)
+        if num_reverse + num_added + len(cdr3_shms) == 0:
+            return DirectedEdgeType.MIXED_ALIGNMENT
         if num_reverse == 0 and num_added == 0:
             return DirectedEdgeType.CDR3
         if num_reverse == 0:
@@ -337,5 +340,6 @@ class DirectedEdgeClassifier:
     
     def ClassifyEdge(self, src_id, dst_id):
         reverse_v_shms, added_v_shms, reverse_j_shms, added_j_shms = self.shm_analyzer.CompareSHMs(src_id, dst_id)
-        edge_type = self._GetEdgeType(reverse_v_shms, reverse_j_shms, added_v_shms, added_j_shms)
-        return DirectEdge(edge_type, reverse_v_shms, added_v_shms, reverse_j_shms, added_j_shms, self._GetCDR3SHMs(src_id, dst_id))
+        cdr3_shms = self._GetCDR3SHMs(src_id, dst_id)
+        edge_type = self._GetEdgeType(reverse_v_shms, reverse_j_shms, added_v_shms, added_j_shms, cdr3_shms)
+        return DirectEdge(edge_type, reverse_v_shms, added_v_shms, reverse_j_shms, added_j_shms, cdr3_shms)
