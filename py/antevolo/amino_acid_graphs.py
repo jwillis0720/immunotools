@@ -19,29 +19,82 @@ import mst_algorithms
 import clonal_tree_simplification
 import clonal_tree_stats
 
-def ComputeAminoAcidGraph(clonal_tree):
-    aa_dict = amino_acid_utils.AminoAcidDict()
-    aa_dict.AddClonalTree(clonal_tree)
-    used_aa = []
-    aa_edges = dict()
-    aa_nucl_dist_map = dict()
-    for e in clonal_tree.EdgeIter():
-        src_id = clonal_tree.GetSequenceByVertex(e[0]).id
-        dst_id = clonal_tree.GetSequenceByVertex(e[1]).id
-        src_aa = aa_dict.GetAAById(src_id)
-        dst_aa = aa_dict.GetAAById(dst_id)
-        if src_aa == dst_aa:
-            continue
-        src_index = aa_dict.GetIndexByAA(src_aa)
-        dst_index = aa_dict.GetIndexByAA(dst_aa)
-        aa_edge = (src_index, dst_index)
-        if aa_edge not in aa_edges:
-            aa_edges[aa_edge] = 0
-        aa_edges[aa_edge] += 1
-        if aa_edge not in aa_nucl_dist_map:
-            aa_nucl_dist_map[aa_edge] = []
-        aa_nucl_dist_map[aa_edge].append(e)
-    return aa_dict, aa_edges
+class ClonalGraph:
+    def __init__(self, clonal_tree):
+        self.clonal_tree = clonal_tree
+        self.full_length_lineage = self.clonal_tree.FullLengthLineage()
+        self.vj_annotator = vj_annotator.VJGeneAnnotator(self.clonal_tree)
+        self._InitEdges()
+
+    def _InitEdges(self):
+        self.aa_dict = amino_acid_utils.AminoAcidDict()
+        self.aa_dict.AddClonalTree(clonal_tree)
+        self.used_aa = []
+        self.aa_edges = dict()
+        self.aa_nucl_dist_map = dict()
+        for e in self.clonal_tree.EdgeIter():
+            src_id = self.clonal_tree.GetSequenceByVertex(e[0]).id
+            dst_id = self.clonal_tree.GetSequenceByVertex(e[1]).id
+            src_aa = self.aa_dict.GetAAById(src_id)
+            dst_aa = self.aa_dict.GetAAById(dst_id)
+            if src_aa == dst_aa:
+                continue
+            src_index = self.aa_dict.GetIndexByAA(src_aa)
+            dst_index = self.aa_dict.GetIndexByAA(dst_aa)
+            aa_edge = (src_index, dst_index)
+            if aa_edge not in self.aa_edges:
+                self.aa_edges[aa_edge] = 0
+            self.aa_edges[aa_edge] += 1
+            if aa_edge not in self.aa_nucl_dist_map:
+                self.aa_nucl_dist_map[aa_edge] = []
+            self.aa_nucl_dist_map[aa_edge].append(e)
+
+    def ComputeGraphSHMs(self):
+        self.shms = TreeSHMs(self.clonal_tree.FullLengthLineage(), self.aa_dict)
+        for e in self.aa_edges:
+            src_aa = self.aa_dict.GetAAByIndex(e[0])
+            dst_aa = self.aa_dict.GetAAByIndex(e[1])
+            for i in range(len(src_aa)):
+                if src_aa[i] == dst_aa[i]:
+                    continue
+                shm = dataset.SHM(i, -1, src_aa[i], dst_aa[i])
+                self.shms.AddSHM(e, shm)
+        for shm in shms.SHMIter():
+            if self.shms.SHMIsRepetitive(shm):
+                print shm, self.shms.GetSHMMultiplicity(shm)
+        return self.shms
+
+    def OutputGraphStructure(self, output_base):
+        dot_fname = output_base + '.dot'
+        fh = open(dot_fname, 'w')
+        fh.write('digraph{\n')
+        for aa in self.aa_dict:
+            aa_index = self.aa_dict.GetIndexByAA(aa)
+            fh.write(str(aa_index) + ' [label = \"AA ID: ' + str(aa_index) + ' mult: ' + str(self.aa_dict.GetAAMultiplicity(aa)) + '\"]\n')
+        for e in self.aa_edges:
+            fh.write(str(e[0]) + ' -> ' + str(e[1]) + ' [label = ' + str(self.shms.GetNumSHMsOnEdge(e)) + ']\n')
+        fh.write('}')
+        fh.close()
+        os.system('dot -Tpdf ' + dot_fname + ' -o ' + output_base + '.pdf')
+
+    def OutputGraphSHMsToTxt(self, output_fname):
+        fh = open(output_fname, 'w')
+        v_gene = self.vj_annotator.GetAbundantGene(dataset.AnnotatedGene.V)
+        j_gene = self.vj_annotator.GetAbundantGene(dataset.AnnotatedGene.J)
+        fh.write('Position\tSrc_AA\tDst_AA\tEdges\tMultiplicity\tRegion\tHas_reverse\tV_gene\tJ_gene\n')
+        for shm in self.shms.SHMIter():
+            edge_str = ','.join([str(e[0]) + '-' + str(e[1]) for e in self.shms.GetEdgesBySHM(shm)])
+            fh.write(str(shm.pos) + '\t' + shm.src_n + '\t' + shm.dst_n + '\t' + edge_str + '\t' + str(self.shms.GetSHMMultiplicity(shm)) + '\t' + self.shms.GetRegionForSHM(shm).name + '\t' + str(self.shms.SHMHasReverse(shm)) + '\t' + v_gene + '\t' + j_gene + '\n')
+        fh.close()
+
+    def OutputPutativeAASeqs(self, output_fname):
+        fh = open(output_fname, 'w')
+        fh.write('Index\tSeq\tDiversity\tNucl_mults\n')
+        for aa in self.aa_dict:
+            aa_ids = self.aa_dict.GetIdsByAA(aa)
+            nucl_mults = sorted([self.full_length_lineage.Dataset().GetSeqMultiplicity(seq_id) for seq_id in aa_ids], reverse = True)
+            fh.write(str(self.aa_dict.GetIndexByAA(aa)) + '\t' + aa + '\t' + str(self.aa_dict.GetAAMultiplicity(aa)) + '\t' + ','.join([str(m) for m in nucl_mults]) + '\n')
+        fh.close()
 
 class TreeSHMs:
     def __init__(self, full_length_lineage, aa_dict):
@@ -124,49 +177,6 @@ class TreeSHMs:
         for e in self.edge_shm_map:
             print e, [(str(shm) + ' : ' + str(len(self.shm_edge_map[shm]))) for shm in self.edge_shm_map[e]]
 
-def ComputeAminoAcidSHMs(full_length_lineage, aa_dict, aa_edges):
-    tree_shms = TreeSHMs(full_length_lineage, aa_dict)
-    for e in aa_edges:
-        src_aa = aa_dict.GetAAByIndex(e[0])
-        dst_aa = aa_dict.GetAAByIndex(e[1])
-        for i in range(len(src_aa)):
-            if src_aa[i] == dst_aa[i]:
-                continue
-            shm = dataset.SHM(i, -1, src_aa[i], dst_aa[i])
-            tree_shms.AddSHM(e, shm)
-    for shm in tree_shms.SHMIter():
-        if tree_shms.SHMIsRepetitive(shm):
-            print shm, tree_shms.GetSHMMultiplicity(shm)
-    return tree_shms
-
-def GetColorByEdge(edge, tree_shms):
-    if tree_shms.EdgeContainsRepetitiveSHMs(edge):
-        return 'red'
-    return 'black'
-    
-def OutputAminoAcidGraph(aa_edges, aa_dict, tree_shms, output_base):
-    dot_fname = output_base + '.dot'
-    fh = open(dot_fname, 'w')
-    fh.write('digraph{\n')
-    for aa in aa_dict:
-        aa_index = aa_dict.GetIndexByAA(aa)
-        fh.write(str(aa_index) + ' [label = \"AA ID: ' + str(aa_index) + ' mult: ' + str(aa_dict.GetAAMultiplicity(aa)) + '\"]\n')
-    for e in aa_edges:
-        fh.write(str(e[0]) + ' -> ' + str(e[1]) + ' [label = ' + str(tree_shms.GetNumSHMsOnEdge(e)) + ']\n')
-    fh.write('}')
-    fh.close()
-    os.system('dot -Tpdf ' + dot_fname + ' -o ' + output_base + '.pdf')
-
-def OutputSHMsToTxt(tree_shms, vj_annotator, output_fname):
-    fh = open(output_fname, 'w')
-    v_gene = vj_annotator.GetAbundantGene(dataset.AnnotatedGene.V)
-    j_gene = vj_annotator.GetAbundantGene(dataset.AnnotatedGene.J)
-    fh.write('Position\tSrc_AA\tDst_AA\tEdges\tMultiplicity\tRegion\tHas_reverse\tV_gene\tJ_gene\n')
-    for shm in tree_shms.SHMIter():
-        edge_str = ','.join([str(e[0]) + '-' + str(e[1]) for e in tree_shms.GetEdgesBySHM(shm)])
-        fh.write(str(shm.pos) + '\t' + shm.src_n + '\t' + shm.dst_n + '\t' + edge_str + '\t' + str(tree_shms.GetSHMMultiplicity(shm)) + '\t' + tree_shms.GetRegionForSHM(shm).name + '\t' + str(tree_shms.SHMHasReverse(shm)) + '\t' + v_gene + '\t' + j_gene + '\n')
-    fh.close()
-
 def OutputClonalTree(clonal_tree, full_length_lineage, output_base, vertex_writer):
     if clonal_tree.NumVertices() > 1000:
         return
@@ -219,10 +229,10 @@ def OutputAbundantAAGraphs(full_length_lineages, output_dir, aa_graph_dir):
         OutputClonalTree(cleaned_tree, l, os.path.join(output_dir, l.id() + '_after_simpl'), clonal_tree_writer.LevelMultiplicityVertexWriter(cleaned_tree))
         OutputClonalTree(cleaned_tree, l, os.path.join(aa_graph_dir, l.id() + '_nucl_tree'), clonal_tree_writer.UniqueAAColorWriter(cleaned_tree))
         # aa graph
-        aa_dict, aa_edges = ComputeAminoAcidGraph(clonal_tree)
+        clonal_graph = ClonalGraph(clonal_tree)
         annotator = vj_annotator.VJGeneAnnotator(clonal_tree)
-        tree_shms = ComputeAminoAcidSHMs(l, aa_dict, aa_edges)
-        tree_shms.Print()
-        OutputAminoAcidGraph(aa_edges, aa_dict, tree_shms, os.path.join(aa_graph_dir, l.id() + '_aa_graph'))
-        OutputSHMsToTxt(tree_shms, annotator, os.path.join(aa_graph_dir, l.id() + '_shms.txt'))
-        OutputLineageAminoAcids(l, aa_dict, os.path.join(aa_graph_dir, l.id() + '_aa_list.txt'))
+        graph_shms = clonal_graph.ComputeGraphSHMs()
+        graph_shms.Print()
+        clonal_graph.OutputGraphStructure(os.path.join(aa_graph_dir, l.id() + '_aa_graph'))
+        clonal_graph.OutputGraphSHMsToTxt(os.path.join(aa_graph_dir, l.id() + '_shms.txt'))
+        clonal_graph.OutputPutativeAASeqs(os.path.join(aa_graph_dir, l.id() + '_seqs.txt'))
