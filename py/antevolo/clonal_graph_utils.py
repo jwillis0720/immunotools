@@ -18,6 +18,7 @@ import clonal_tree_writer
 import mst_algorithms
 import clonal_tree_simplification
 import clonal_tree_stats
+import clonal_graph_algorithms
 
 class ClonalGraph:
     def __init__(self, clonal_tree):
@@ -25,13 +26,17 @@ class ClonalGraph:
         self.full_length_lineage = self.clonal_tree.FullLengthLineage()
         self.vj_annotator = vj_annotator.VJGeneAnnotator(self.clonal_tree)
         self._InitEdges()
+        self._InitRoot()
+        self._InitAdjList()
+        self._InitSHMs()
 
     def _InitEdges(self):
         self.aa_dict = amino_acid_utils.AminoAcidDict()
-        self.aa_dict.AddClonalTree(clonal_tree)
+        self.aa_dict.AddClonalTree(self.clonal_tree)
         self.used_aa = []
         self.aa_edges = dict()
         self.aa_nucl_dist_map = dict()
+        self.vertex_indices = set()
         for e in self.clonal_tree.EdgeIter():
             src_id = self.clonal_tree.GetSequenceByVertex(e[0]).id
             dst_id = self.clonal_tree.GetSequenceByVertex(e[1]).id
@@ -41,6 +46,8 @@ class ClonalGraph:
                 continue
             src_index = self.aa_dict.GetIndexByAA(src_aa)
             dst_index = self.aa_dict.GetIndexByAA(dst_aa)
+            self.vertex_indices.add(src_index)
+            self.vertex_indices.add(dst_index)
             aa_edge = (src_index, dst_index)
             if aa_edge not in self.aa_edges:
                 self.aa_edges[aa_edge] = 0
@@ -49,7 +56,22 @@ class ClonalGraph:
                 self.aa_nucl_dist_map[aa_edge] = []
             self.aa_nucl_dist_map[aa_edge].append(e)
 
-    def ComputeGraphSHMs(self):
+    def _InitRoot(self):
+        root_aa = self.aa_dict.GetAAById(self.clonal_tree.RootSeq().id)
+        self.root = self.aa_dict.GetIndexByAA(root_aa)
+
+    def _InitAdjList(self):
+        self.adj_lists = dict()
+        self.parent_dict = dict()
+        for e in self.aa_edges:
+            if e[0] not in self.adj_lists:
+                self.adj_lists[e[0]] = []
+            self.adj_lists[e[0]].append(e[1])
+            if e[1] not in self.adj_lists:
+                self.adj_lists[e[1]] = []
+            self.parent_dict[e[1]] = e[0]
+
+    def _InitSHMs(self):
         self.shms = TreeSHMs(self.clonal_tree.FullLengthLineage(), self.aa_dict)
         for e in self.aa_edges:
             src_aa = self.aa_dict.GetAAByIndex(e[0])
@@ -59,10 +81,32 @@ class ClonalGraph:
                     continue
                 shm = dataset.SHM(i, -1, src_aa[i], dst_aa[i])
                 self.shms.AddSHM(e, shm)
-        for shm in shms.SHMIter():
-            if self.shms.SHMIsRepetitive(shm):
-                print shm, self.shms.GetSHMMultiplicity(shm)
+
+    def GetGraphSHMs(self):
         return self.shms
+
+    def VertexIndexIter(self):
+        for v in self.vertex_indices:
+            yield v
+
+    def GetRootIndex(self):
+        return self.root
+
+    def EdgeIter(self):
+        for e in self.aa_edges:
+            yield e
+
+    def GetDescendants(self, v):
+        return self.adj_lists[v]
+
+    def GetParent(self, v):
+        return self.parent_dict[v]
+
+    def IsLeaf(self, v):
+        return len(self.adj_lists[v]) == 0
+
+    def NumVertices(self):
+        return len(self.vertex_indices)
 
     def OutputGraphStructure(self, output_base):
         dot_fname = output_base + '.dot'
@@ -95,6 +139,38 @@ class ClonalGraph:
             nucl_mults = sorted([self.full_length_lineage.Dataset().GetSeqMultiplicity(seq_id) for seq_id in aa_ids], reverse = True)
             fh.write(str(self.aa_dict.GetIndexByAA(aa)) + '\t' + aa + '\t' + str(self.aa_dict.GetAAMultiplicity(aa)) + '\t' + ','.join([str(m) for m in nucl_mults]) + '\n')
         fh.close()
+
+    def _PositionIsInCDRs(self, aa_pos):
+        if aa_pos >= self.shms.cdr1_bounds[0] and aa_pos <= self.shms.cdr1_bounds[1]:
+            return True
+        if aa_pos >= self.shms.cdr2_bounds[0] and aa_pos <= self.shms.cdr2_bounds[1]:
+            return True
+        if aa_pos >= self.shms.cdr3_bounds[0] and aa_pos <= self.shms.cdr3_bounds[1]:
+            return True
+        return False
+
+    def OutputGraphSHMsAsMatrix(self, vertex_orderer, output_fname):
+        matrix = []
+        vertex_order = vertex_orderer.GetOrder()
+        aa_len = len(self.aa_dict.GetAAByIndex(self.GetRootIndex()))
+        for v in vertex_order:
+            matrix.append([0] * aa_len)
+        for i in range(len(matrix)):
+            for j in range(len(matrix[i])):
+                if self._PositionIsInCDRs(j):
+                    matrix[i][j] = 1
+        for i in range(1, len(vertex_order)):
+            cur_aa = self.aa_dict.GetAAByIndex(vertex_order[i])
+            parent_aa = self.aa_dict.GetAAByIndex(self.GetParent(vertex_order[i]))
+            for j in range(len(cur_aa)):
+                if cur_aa[j] != parent_aa[j]:
+                    matrix[i][j] = 2
+        vertex_levels = clonal_graph_algorithms.GetLevelsByVertexOrder(self, vertex_order)
+        level_colors = []
+        for l in vertex_levels:
+            level_colors.append(utils.GetColorByNormalizedValue('jet', float(l) / max(vertex_levels)))
+        sns.clustermap(matrix, cmap = 'coolwarm', yticklabels = [str(v) for v in vertex_order], row_colors = level_colors, row_cluster = False, col_cluster = False, xticklabels = [])
+        utils.OutputPlotToPdf(output_fname)
 
 class TreeSHMs:
     def __init__(self, full_length_lineage, aa_dict):
@@ -216,7 +292,7 @@ def OutputAbundantAAGraphs(full_length_lineages, output_dir, aa_graph_dir):
         OutputClonalTree(clonal_tree, l, os.path.join(output_dir, l.id() + '_before_simpl'), clonal_tree_writer.LevelMultiplicityVertexWriter(clonal_tree))
         # simplification step
         print "# vertices before simplification: " + str(clonal_tree.NumVertices())
-        min_vertex_abundance = 10
+        min_vertex_abundance = 2
         leaf_filter = clonal_tree_simplification.LowFixedAbundanceLeafRemover(clonal_tree, l, min_vertex_abundance)
         leaf_remover = clonal_tree_simplification.IterativeTipRemover(clonal_tree, leaf_filter)
         cleaned_tree = leaf_remover.CleanTips()
@@ -230,9 +306,7 @@ def OutputAbundantAAGraphs(full_length_lineages, output_dir, aa_graph_dir):
         OutputClonalTree(cleaned_tree, l, os.path.join(aa_graph_dir, l.id() + '_nucl_tree'), clonal_tree_writer.UniqueAAColorWriter(cleaned_tree))
         # aa graph
         clonal_graph = ClonalGraph(clonal_tree)
-        annotator = vj_annotator.VJGeneAnnotator(clonal_tree)
-        graph_shms = clonal_graph.ComputeGraphSHMs()
-        graph_shms.Print()
         clonal_graph.OutputGraphStructure(os.path.join(aa_graph_dir, l.id() + '_aa_graph'))
         clonal_graph.OutputGraphSHMsToTxt(os.path.join(aa_graph_dir, l.id() + '_shms.txt'))
         clonal_graph.OutputPutativeAASeqs(os.path.join(aa_graph_dir, l.id() + '_seqs.txt'))
+        clonal_graph.OutputGraphSHMsAsMatrix(clonal_graph_algorithms.DFSVertexOrderFinder(clonal_graph), os.path.join(aa_graph_dir, l.id() + '_shm_matrix.pdf'))

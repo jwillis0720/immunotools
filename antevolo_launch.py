@@ -11,7 +11,7 @@ import clonal_tree_writer
 import amino_acid_utils
 import clonal_tree_utils
 import clonal_tree_constructor
-import amino_acid_graphs
+import clonal_graph_utils
 
 def FilterClonalLineage(cdr3_lineage):
     return cdr3_lineage.NumFullLengthSequences() < 20 #or cdr3_lineage.NumFullLengthSequences() > 2000
@@ -68,7 +68,7 @@ def main(argv):
             continue
         full_length_lineages.append(full_length_clonal_lineage.FullLengthClonalLineage(l))
     print str(len(full_length_lineages)) + " full-length lineages were constructed"
-    amino_acid_graphs.OutputAbundantAAGraphs(full_length_lineages, output_dir, output_dirs['amino_acid_graphs'])
+    clonal_graph_utils.OutputAbundantAAGraphs(full_length_lineages, output_dir, output_dirs['amino_acid_graphs'])
 
 if __name__ == '__main__':
     main(sys.argv)
